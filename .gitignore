@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Training outputs and model weights
+runs/
+*.pt
+*.onnx
+
+# Local dataset and configuration
+data.yaml
+dataset/images/
+dataset/labels/
+missing_images.tsv
+
+# Editors and operating systems
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
