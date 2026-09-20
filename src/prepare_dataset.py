@@ -141,9 +141,9 @@ def main() -> None:
     print(f"Copied images: {copied}")
     print(f"Missing images: {len(missing)}")
 
+    report = dataset_root / "missing_images.tsv"
+    
     if missing:
-        report = dataset_root / "missing_images.tsv"
-
         report.write_text(
             "".join(
                 f"{split}\t{stem}\n"
@@ -151,13 +151,15 @@ def main() -> None:
             ),
             encoding="utf-8",
         )
-
+    
         print(f"Missing-image report: {report}")
         print(
             "Check that each label filename stem exactly matches "
             "its corresponding image filename stem before training."
         )
-
+    
+    elif report.exists():
+        report.unlink()
 
 if __name__ == "__main__":
     main()
