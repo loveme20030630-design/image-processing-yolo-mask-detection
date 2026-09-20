@@ -1,4 +1,4 @@
-````markdown
+``markdown
 # YOLO-based Mask Detection
 
 以 YOLOv8 建立口罩佩戴狀態偵測模型，辨識 `with_mask` 與 `without_mask` 兩類目標。
