@@ -371,7 +371,7 @@ labels/val/
 labels/test/
 ```
 
-每個標註檔必須與對應影像使用完全相同的檔名主體。
+每個標註檔必須與對應影像使用完全相同的 filename stem。
 
 例如：
 
@@ -470,10 +470,11 @@ ValueError: Duplicate image filename stems found.
 missing_images.tsv
 ```
 
-內容會記錄：
+檔案會逐行記錄缺失影像所屬的 split 與 filename stem，例如：
 
 ```text
-split    filename_stem
+train	1234
+val	5678_1
 ```
 
 供後續確認缺失資料。
