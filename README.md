@@ -18,6 +18,7 @@
 * 使用 Precision、Recall、mAP@50 與 mAP@50–95 評估模型。
 * 分別保留 YOLOv8n 與 YOLOv8s 的訓練曲線、混淆矩陣與 Validation 預測結果，作為實驗證據。
 * 以獨立 Python 程式整理訓練、模型評估、推論與資料整理流程。
+* 資料整理程式會檢查來源影像是否存在重複 filename stem，避免標註與影像發生錯誤配對。
 * 另外實作 IoU 與簡化版 Non-Maximum Suppression，理解物件偵測候選框篩選原理。
 
 ---
@@ -191,7 +192,7 @@ class_id x_center y_center width height
 
 YOLOv8s 在 Test split 的 Recall 與 mAP@50 較高，而 YOLOv8n 的 Precision 略高。
 
-但在較嚴格、同時考慮多個 IoU threshold 的 **mAP@50–95** 指標中，兩者皆為 0.657。
+但在同時考慮多個 IoU threshold 的 **mAP@50–95** 指標中，兩者皆為 0.657。
 
 因此，在本次資料與訓練條件下，並未觀察到 YOLOv8s 相較 YOLOv8n 在 mAP@50–95 上具有明顯優勢。
 
@@ -206,7 +207,7 @@ YOLOv8s 在 Test split 的 Recall 與 mAP@50 較高，而 YOLOv8n 的 Precision 
 * 記憶體需求
 * 邊緣裝置效能
 
-才能進行更完整的模型選擇。
+才能進行更完整的模型比較。
 
 ---
 
@@ -218,7 +219,7 @@ YOLOv8s 在 Test split 的 Recall 與 mAP@50 較高，而 YOLOv8n 的 Precision 
 
 ![YOLOv8n 訓練曲線](assets/results_yolov8n.png)
 
-透過訓練曲線可觀察 Bounding Box Loss、Classification Loss，以及 Precision、Recall 與 mAP 等指標隨 Epoch 的變化，並用於確認模型是否正常收斂。
+透過訓練曲線可觀察 Bounding Box Loss、Classification Loss，以及 Precision、Recall 與 mAP 等指標隨 Epoch 的變化，並用於確認模型訓練過程。
 
 ---
 
@@ -234,7 +235,7 @@ YOLOv8s 在 Test split 的 Recall 與 mAP@50 較高，而 YOLOv8n 的 Precision 
 
 ![YOLOv8n Validation Predictions](assets/val_predictions_yolov8n.jpg)
 
-圖中顯示 YOLOv8n 對 Validation Batch 進行物件偵測後的實際 Bounding Box 與類別預測結果。
+圖中顯示 YOLOv8n 對 Validation Batch 進行物件偵測後的 Bounding Box 與類別預測結果。
 
 ---
 
@@ -258,7 +259,7 @@ YOLOv8s 在 Test split 的 Recall 與 mAP@50 較高，而 YOLOv8n 的 Precision 
 
 ![YOLOv8s Validation Predictions](assets/val_predictions_yolov8s.jpg)
 
-透過保留 YOLOv8n 與 YOLOv8s 的完整視覺化結果，可直接比較兩種模型，而非僅以最終單一 mAP 數值作為模型表現依據。
+透過保留 YOLOv8n 與 YOLOv8s 的完整視覺化結果，可直接比較兩種模型，而非僅以單一最終 mAP 數值作為模型表現依據。
 
 ---
 
@@ -268,13 +269,11 @@ YOLOv8s 在 Test split 的 Recall 與 mAP@50 較高，而 YOLOv8n 的 Precision 
 
 ![Mask Detection Example](assets/sample_prediction.jpg)
 
-模型會輸出：
+模型推論結果包含：
 
 * 預測類別
 * Bounding Box
 * Confidence Score
-
-作為實際推論結果。
 
 ---
 
@@ -311,17 +310,19 @@ YOLOv8s 在 Test split 的 Recall 與 mAP@50 較高，而 YOLOv8n 的 Precision 
 
 主要程式用途：
 
-| 程式                   | 功能                    |
-| -------------------- | --------------------- |
-| `train.py`           | YOLOv8 模型訓練           |
-| `evaluate.py`        | Validation／Test 模型評估  |
-| `predict.py`         | 圖片、資料夾或影片推論           |
-| `prepare_dataset.py` | 依既有 YOLO Label 整理對應影像 |
-| `nms_demo.py`        | IoU 與簡化版 NMS 原理實作     |
+| 程式                   | 功能                                       |
+| -------------------- | ---------------------------------------- |
+| `train.py`           | YOLOv8 模型訓練                              |
+| `evaluate.py`        | Validation／Test 模型評估                     |
+| `predict.py`         | 圖片、資料夾、影片、URL 或 Webcam 推論                |
+| `prepare_dataset.py` | 依既有 YOLO Label 整理對應影像並檢查重複 filename stem |
+| `nms_demo.py`        | IoU 與簡化版 NMS 原理實作                        |
 
 ---
 
 # 快速開始
+
+建議使用 **Python 3.10 以上版本**。
 
 ## 1. 建立 Python 環境
 
@@ -404,10 +405,13 @@ python src/prepare_dataset.py \
 
 程式會：
 
-1. 讀取 `labels/train`、`labels/val`、`labels/test` 中既有的 `.txt` 標註。
-2. 取得每個標註檔的檔名主體。
-3. 在來源影像資料夾中尋找同名影像。
-4. 將影像複製至對應的 `images/train`、`images/val` 或 `images/test`。
+1. 遞迴掃描 `--source-images` 指定的來源影像資料夾。
+2. 建立以 filename stem 為索引的影像清單。
+3. 檢查來源影像是否存在重複 filename stem。
+4. 讀取 `labels/train`、`labels/val`、`labels/test` 中既有的 `.txt` 標註。
+5. 依照標註檔的 filename stem 尋找對應影像。
+6. 將影像複製至對應的 `images/train`、`images/val` 或 `images/test`。
+7. 記錄找不到對應影像的標註項目。
 
 例如：
 
@@ -415,29 +419,72 @@ python src/prepare_dataset.py \
 1234.txt
 ```
 
-會尋找：
+可對應：
 
 ```text
 1234.jpg
 1234.jpeg
 1234.png
+1234.bmp
+1234.webp
 ```
 
-等可能的同名影像。
+標註檔與影像的副檔名可以不同，但 **filename stem 必須完全一致**。
 
-若找不到影像，程式會產生：
+---
+
+## Duplicate filename stem 檢查
+
+為避免標註與影像錯誤配對，`prepare_dataset.py` 會檢查來源影像的 filename stem 是否唯一。
+
+例如來源資料中若同時存在：
+
+```text
+folder_a/123.jpg
+folder_b/123.png
+```
+
+兩張影像的 filename stem 都是：
+
+```text
+123
+```
+
+此時程式不會任意選擇其中一張影像，而是直接停止執行並拋出：
+
+```text
+ValueError: Duplicate image filename stems found.
+```
+
+錯誤訊息會列出發生衝突的 stem 與所有對應檔案路徑。
+
+此設計可避免資料整理流程在沒有警告的情況下將錯誤影像配對至 YOLO Label。
+
+---
+
+## Missing image 檢查
+
+若某個 Label 找不到對應影像，程式會建立：
 
 ```text
 missing_images.tsv
 ```
 
-供後續檢查。
+內容會記錄：
+
+```text
+split    filename_stem
+```
+
+供後續確認缺失資料。
 
 開始模型訓練前應確認：
 
 * 每個 Label 都有對應影像。
-* Image 與 Label 檔名主體完全一致。
+* Image 與 Label 的 filename stem 完全一致。
+* 每個來源影像的 filename stem 具有唯一性。
 * Train／Validation／Test 分類正確。
+* `missing_images.tsv` 中沒有尚未處理的必要資料。
 * `data.yaml` 路徑設定正確。
 * 類別編號與類別名稱順序一致。
 
@@ -527,16 +574,31 @@ python src/evaluate.py \
 
 若要評估 YOLOv8n，只需將 `--weights` 改為 YOLOv8n 對應的 `best.pt`。
 
+評估程式會輸出：
+
+* Precision
+* Recall
+* mAP@50
+* mAP@50–95
+
 ---
 
 # 6. 模型推論
 
-可對單張圖片、圖片資料夾或影片執行推論：
+可對單張圖片、圖片資料夾、影片、URL 或 Webcam 執行推論：
 
 ```bash
 python src/predict.py \
   --weights runs/mask_detection/yolov8s/weights/best.pt \
   --source path/to/image_or_video
+```
+
+例如使用預設 Webcam：
+
+```bash
+python src/predict.py \
+  --weights runs/mask_detection/yolov8s/weights/best.pt \
+  --source 0
 ```
 
 推論完成後可取得模型辨識類別、Bounding Box 與 Confidence Score。
@@ -577,7 +639,7 @@ NMS 的基本處理流程為：
 4. 移除 IoU 超過設定 Threshold 的重複候選框。
 5. 重複上述流程。
 
-本專案中的 `nms_demo.py` 主要用於理解物件偵測後處理原理，並非取代 Ultralytics YOLOv8 內部完整的 NMS 流程。
+本專案中的 `nms_demo.py` 為 **class-agnostic greedy NMS** 的簡化實作，主要用於理解物件偵測後處理原理，並非取代 Ultralytics YOLOv8 內部完整的 NMS 流程。
 
 ---
 
@@ -587,13 +649,13 @@ NMS 的基本處理流程為：
 
 YOLOv8s 在 Test split 中取得較高的 Recall 與 mAP@50，但 YOLOv8n 在 Precision 上略高。
 
-更值得注意的是，兩者的 Test mAP@50–95 都為 **0.657**。
+兩者在 Test split 的 mAP@50–95 均為 **0.657**。
 
 因此，本次結果不能單純解讀為「模型越大一定越好」。
 
-在特定資料量與任務複雜度下，較大的模型可能無法帶來等比例的效能提升；若考慮實際部署，YOLOv8n 的模型規模與推論成本反而可能成為重要因素。
+在目前資料量與任務條件下，YOLOv8s 雖在部分指標較高，但未在 mAP@50–95 上呈現明顯優勢。
 
-不過，由於目前尚未完成統一硬體環境下的 FPS、Latency 與模型資源需求測試，因此 repository 不直接宣稱其中任一模型具有較佳的整體部署效益。
+若進一步考慮實際部署，仍需要在相同硬體環境下比較 FPS、Latency、模型大小與資源使用量，才能判斷兩種模型的部署差異。
 
 ---
 
@@ -611,7 +673,7 @@ YOLOv8s 在 Test split 中取得較高的 Recall 與 mAP@50，但 YOLOv8n 在 Pr
 * 現有主要指標為 Precision、Recall、mAP@50 與 mAP@50–95。
 * 尚未在完全一致的硬體條件下比較模型 Latency 與 FPS。
 * 尚未系統化整理 False Positive／False Negative 案例。
-* 目前 repository 不包含即時多人追蹤功能。
+* 公開 repository 未包含完整資料與模型權重，因此無法僅依 repository 精確重現本次所有訓練結果。
 
 ---
 
@@ -635,7 +697,7 @@ YOLOv8s 在 Test split 中取得較高的 Recall 與 mAP@50，但 YOLOv8n 在 Pr
 
 # 使用技術
 
-* Python
+* Python 3.10+
 * PyTorch
 * Ultralytics YOLOv8
 * LabelImg
@@ -650,6 +712,8 @@ YOLOv8s 在 Test split 中取得較高的 Recall 與 mAP@50，但 YOLOv8n 在 Pr
 
 # 專案定位
 
-本專案的重點不僅是完成一次 YOLO 模型訓練，而是將影像資料整理、人工物件標註、模型訓練、Validation／Test 評估、推論結果保存，以及 IoU／NMS 原理理解整合為一個可重現的物件偵測實作流程。
+本專案的重點不僅是完成一次 YOLO 模型訓練，而是將影像資料整理、人工物件標註、模型訓練、Validation／Test 評估、推論結果保存，以及 IoU／NMS 原理理解整合為一套完整的物件偵測實作流程。
 
-透過 YOLOv8n 與 YOLOv8s 的比較，也進一步觀察模型規模、Precision、Recall 與 mAP 指標之間的差異，並保留完整的訓練曲線、混淆矩陣與實際預測結果作為實驗證據。
+其中資料整理流程另外加入 filename stem 唯一性檢查與缺失影像記錄，降低資料配對錯誤在後續模型訓練階段才被發現的風險。
+
+透過 YOLOv8n 與 YOLOv8s 的比較，也進一步觀察模型規模、Precision、Recall 與 mAP 指標之間的差異，並保留兩種模型的訓練曲線、混淆矩陣與實際預測結果作為實驗證據。
