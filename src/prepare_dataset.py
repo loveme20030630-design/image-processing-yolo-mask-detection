@@ -87,6 +87,7 @@ def index_images(source: Path) -> dict[str, Path]:
 
     return index
 
+
 def main() -> None:
     args = parse_args()
 
