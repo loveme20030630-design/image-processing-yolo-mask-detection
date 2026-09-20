@@ -56,16 +56,36 @@ def parse_args() -> argparse.Namespace:
 
 
 def index_images(source: Path) -> dict[str, Path]:
-    """Build an index of source images using the filename stem."""
+    """Build an image index and reject duplicate filename stems."""
 
     index: dict[str, Path] = {}
+    duplicates: dict[str, list[Path]] = {}
 
     for path in source.rglob("*"):
-        if path.is_file() and path.suffix.lower() in IMAGE_EXTENSIONS:
-            index.setdefault(path.stem, path)
+        if not path.is_file() or path.suffix.lower() not in IMAGE_EXTENSIONS:
+            continue
+
+        existing = index.get(path.stem)
+
+        if existing is None:
+            index[path.stem] = path
+            continue
+
+        duplicates.setdefault(path.stem, [existing]).append(path)
+
+    if duplicates:
+        details = "\n".join(
+            f"{stem}: " + " | ".join(str(path) for path in paths)
+            for stem, paths in sorted(duplicates.items())
+        )
+
+        raise ValueError(
+            "Duplicate image filename stems found.\n"
+            "Each label stem must map to exactly one source image.\n"
+            f"{details}"
+        )
 
     return index
-
 
 def main() -> None:
     args = parse_args()
